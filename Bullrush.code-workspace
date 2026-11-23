@@ -1,0 +1,11 @@
+{
+  "folders": [{"path": "."}],
+  "settings": {"files.encoding": "utf8", "editor.tabSize": 2},
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {"label": "Starta Bullrush", "type": "shell", "command": "npm start", "problemMatcher": [], "isBackground": true},
+      {"label": "Testa Bullrush", "type": "shell", "command": "npm test", "problemMatcher": []}
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "bullrush",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bullrush – dartapp med experimentell kameraavläsning",
+  "scripts": {"start": "node server.mjs", "test": "node checks.mjs && node detection-checks.mjs"},
+  "engines": {"node": ">=20"}
+}
