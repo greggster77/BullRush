@@ -1,5 +1,5 @@
 const cachePrefix = 'bullrush-app-';
-const cacheName = cachePrefix + 'v2';
+const cacheName = cachePrefix + 'v3';
 const appShell = [
   './',
   './style.css',

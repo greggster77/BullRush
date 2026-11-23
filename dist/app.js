@@ -3,15 +3,21 @@ import {AutoTracker} from './detection.mjs';
 import {drawBoard,boardPoint} from './board.mjs';
 const $=id=>document.getElementById(id),video=$('video'),overlay=$('overlay'),o=overlay.getContext('2d'),sample=document.createElement('canvas'),ctx=sample.getContext('2d',{willReadFrequently:true});
 let state;try{state=JSON.parse(localStorage.getItem('pilkoll-match-v1'));}catch{}if(!state||!Array.isArray(state.players)||!state.players.length)state=fresh(['Greger'],501,true);
+
+state.legsToWin ??= 1;
+state.leg ??= 1;
+state.players.forEach((player, index) => {
+  player.legs ??= Number(state.winner === index);
+});
 let undoStack=[],multiplier=1,editIndex=null,stream=null,interval=null,H=null,points=[],calibrating=false,tracker=null,auto=false,advanceOnClear=false,cameraView=false,lastTip=null,wakeLock=null,modalPaused=false,cameraStarting=false;
-function fresh(names,start,double){return {players:names.map(name=>({name,score:start})),start,double,turn:0,darts:[],history:[],winner:null};}
+function fresh(names,start,double,legsToWin=1){return {players:names.map(name=>({name,score:start,legs:0})),start,double,legsToWin,leg:1,turn:0,darts:[],history:[],winner:null};}
 function save(){try{localStorage.setItem('pilkoll-match-v1',JSON.stringify(state));}catch{gameMessage('Matchen kunde inte sparas i webbläsaren.');}}
 function snapshot(){undoStack.push(JSON.stringify(state));if(undoStack.length>100)undoStack.shift();}
 function result(){if(state.winner!==null)return {left:0,bust:false,win:true};return visitResult(state.players[state.turn].score,state.darts,state.double);}
 function gameMessage(text){$('gamestatus').textContent=text;}
-function statsFor(i){const mine=state.history.filter(v=>v.player===i),sum=mine.reduce((a,v)=>a+v.scored,0),n=mine.reduce((a,v)=>a+v.darts.length,0);return {average:n?(sum/n*3).toFixed(1):'0.0',darts:n,best:mine.length?Math.max(...mine.map(v=>v.scored)):0};}
+function statsFor(i,leg){const mine=state.history.filter(v=>v.player===i&&(leg===undefined||(v.leg??1)===leg)),sum=mine.reduce((a,v)=>a+v.scored,0),n=mine.reduce((a,v)=>a+v.darts.length,0);return {average:n?(sum/n*3).toFixed(1):'0.0',darts:n,best:mine.length?Math.max(...mine.map(v=>v.scored)):0};}
 const dartSVG='<svg viewBox="0 0 100 28" aria-hidden="true"><path d="M2 14 9 3h13l9 9h52l12 2-12 2H31l-9 9H9Z"/></svg>';
-function render(){const r=result();$('match-format').textContent=state.start+' · '+(state.double?'Dubbel ut':'Rak ut');$('players').replaceChildren(...state.players.map((p,i)=>{let el=document.createElement('div');el.className='player'+(state.turn===i?' active':'');let name=document.createElement('span');name.className='name';name.textContent=p.name;let scoreRow=document.createElement('div');scoreRow.className='score-row';let num=document.createElement('strong');num.textContent=i===state.turn?r.left:p.score;let turnScore=document.createElement('span');turnScore.className='turn-score';turnScore.textContent=state.winner===i?'1':'0';scoreRow.append(num,turnScore);let avg=document.createElement('div');avg.className='averages';let stats=statsFor(i);avg.textContent='Leg '+stats.average+' / Match '+stats.average;let count=document.createElement('span');count.className='dart-count';count.textContent=stats.darts+(i===state.turn?state.darts.length:0);el.append(name,scoreRow,avg,count);return el;}));if(state.players.length===1){let p=document.createElement('div');p.className='player passive';p.innerHTML='<span class="name">◎ EGEN TRÄNING</span><div class="score-row"><strong>SOLO</strong></div><div class="averages">En spelare · ett leg</div><span class="dart-count">En pil i taget</span>';$('players').append(p);}$('darts').replaceChildren(...[0,1,2].map(i=>{let b=document.createElement('button');b.className='dart';let d=state.darts[i];b.disabled=!d||state.winner!==null;b.setAttribute('aria-label',d?'Rätta pil '+(i+1)+': '+d.label:'Pil '+(i+1)+' ej kastad');if(d){b.textContent=d.label;if(d.source==='camera'){let dot=document.createElement('i');dot.className='auto-dot';b.append(dot);}b.onclick=()=>openManual(i);}else b.innerHTML=dartSVG;return b;}));$('visitTotal').textContent=r.bust?'BUST':state.darts.reduce((a,d)=>a+d.value,0);renderCheckout(r);$('next').disabled=!state.darts.length||state.winner!==null;$('next').textContent=r.win?'Spara':'Nästa';$('undo').disabled=!undoStack.length;let s=statsFor(state.turn);$('average').textContent=s.average;$('best').textContent=s.best||'–';$('stats-player').textContent=state.players[state.turn].name;$('history').replaceChildren();if(!state.history.length)$('history').textContent='Inga färdiga omgångar ännu.';for(const v of state.history.slice(-8).reverse()){let p=document.createElement('p'),name=document.createElement('span'),val=document.createElement('strong');name.textContent=state.players[v.player].name+' · '+v.darts.map(d=>d.label).join(' / ');val.textContent=v.bust?'BUST':v.scored;p.append(name,val);$('history').append(p);}drawBoard($('board'),state.darts);const blocked=state.darts.length>=3||r.bust||r.win||state.winner!==null;document.querySelectorAll('#numbers button,#bull,#doublebull,#miss').forEach(b=>b.disabled=editIndex===null&&blocked);}
+function render(){const r=result();$('match-format').textContent=state.start+' · '+(state.double?'Dubbel ut':'Rak ut')+(state.legsToWin>1?' · Leg '+state.leg:'');$('players').replaceChildren(...state.players.map((p,i)=>{let el=document.createElement('div');el.className='player'+(state.turn===i?' active':'');let name=document.createElement('span');name.className='name';name.textContent=p.name;let scoreRow=document.createElement('div');scoreRow.className='score-row';let num=document.createElement('strong');num.textContent=i===state.turn?r.left:p.score;let turnScore=document.createElement('span');turnScore.className='turn-score';turnScore.textContent=p.legs;turnScore.title=p.legs+' vunna leg';turnScore.setAttribute('aria-label',turnScore.title);scoreRow.append(num,turnScore);let avg=document.createElement('div');avg.className='averages';let stats=statsFor(i);avg.textContent='Leg '+statsFor(i,state.leg).average+' / Match '+stats.average;let count=document.createElement('span');count.className='dart-count';count.textContent=stats.darts+(i===state.turn?state.darts.length:0);el.append(name,scoreRow,avg,count);return el;}));if(state.players.length===1){let p=document.createElement('div');p.className='player passive';p.innerHTML='<span class="name">◎ EGEN TRÄNING</span><div class="score-row"><strong>SOLO</strong></div><div class="averages">En spelare</div><span class="dart-count">En pil i taget</span>';$('players').append(p);}$('darts').replaceChildren(...[0,1,2].map(i=>{let b=document.createElement('button');b.className='dart';let d=state.darts[i];b.disabled=!d||state.winner!==null;b.setAttribute('aria-label',d?'Rätta pil '+(i+1)+': '+d.label:'Pil '+(i+1)+' ej kastad');if(d){b.textContent=d.label;if(d.source==='camera'){let dot=document.createElement('i');dot.className='auto-dot';b.append(dot);}b.onclick=()=>openManual(i);}else b.innerHTML=dartSVG;return b;}));$('visitTotal').textContent=r.bust?'BUST':state.darts.reduce((a,d)=>a+d.value,0);renderCheckout(r);$('next').disabled=!state.darts.length||state.winner!==null;$('next').textContent=r.win?'Spara':'Nästa';$('undo').disabled=!undoStack.length;let s=statsFor(state.turn);$('average').textContent=s.average;$('best').textContent=s.best||'–';$('stats-player').textContent=state.players[state.turn].name;$('history').replaceChildren();if(!state.history.length)$('history').textContent='Inga färdiga omgångar ännu.';for(const v of state.history.slice(-8).reverse()){let p=document.createElement('p'),name=document.createElement('span'),val=document.createElement('strong');name.textContent=state.players[v.player].name+' · '+v.darts.map(d=>d.label).join(' / ');val.textContent=v.bust?'BUST':v.scored;p.append(name,val);$('history').append(p);}drawBoard($('board'),state.darts);const blocked=state.darts.length>=3||r.bust||r.win||state.winner!==null;document.querySelectorAll('#numbers button,#bull,#doublebull,#miss').forEach(b=>b.disabled=editIndex===null&&blocked);}
 function renderCheckout(visit) {
   const dartsLeft = 3 - state.darts.length;
   const route = visit.bust || visit.win ? null : checkout(visit.left, state.double, dartsLeft);
@@ -28,7 +34,46 @@ function renderCheckout(visit) {
 }
 function pointFor(d){if(d.value===0)return {};if(d.value===25||d.value===50)return {bx:0,by:d.value===25?.065:0};let n=d.value/d.m,i=sectors.indexOf(n),a=-Math.PI/2+i*Math.PI/10,r=d.m===3?.606:d.m===2?.976:.8;return {bx:Math.cos(a)*r,by:Math.sin(a)*r};}
 function insert(d,source='manual'){const r=result();if(editIndex===null&&(state.darts.length>=3||r.bust||r.win||state.winner!==null))return false;if(!Number.isFinite(d.bx))Object.assign(d,pointFor(d));d.source=source;snapshot();if(editIndex!==null){state.darts[editIndex]=d;editIndex=null;}else state.darts.push(d);save();render();if(tracker&&auto){const next=result();if(state.darts.length>=3||next.bust||next.win){tracker.waitForClear();advanceOnClear=true;cameraMessage(next.win?'Utgång! Ta ur pilarna för att spara segern.':'Omgång klar. Ta ur alla pilar — appen går vidare automatiskt.','clear');}else if(source==='camera'){cameraMessage(d.label+' · '+d.value+' poäng. Redo för nästa pil.','live');}else{tracker.phase='watch';advanceOnClear=false;tracker.resume();cameraMessage('Avläser tavlan igen. Vänta tills kameran är redo.','live');}}return true;}
-function finishVisit(fromCamera=false){if(!state.darts.length||state.winner!==null)return;const r=result();snapshot();state.history.push({player:state.turn,darts:[...state.darts],bust:r.bust,scored:r.bust?0:state.players[state.turn].score-r.left});state.players[state.turn].score=r.left;if(r.win){state.winner=state.turn;gameMessage(state.players[state.turn].name+' vann!');auto=false;releaseWake();}else{state.turn=(state.turn+1)%state.players.length;state.darts=[];gameMessage('');}advanceOnClear=false;if(tracker&&auto&&!fromCamera){tracker.waitForClear();cameraMessage('Ta ur alla pilar. Kameran väntar på tom tavla.','clear');}save();render();updateButtons();}
+function finishVisit(fromCamera = false) {
+  if (!state.darts.length || state.winner !== null) return;
+  const visit = result();
+  snapshot();
+  const player = state.players[state.turn];
+  state.history.push({
+    player: state.turn, leg: state.leg, darts: [...state.darts],
+    bust: visit.bust, scored: visit.bust ? 0 : player.score - visit.left
+  });
+  player.score = visit.left;
+  state.darts = [];
+
+  if (visit.win) {
+    player.legs += 1;
+    if (player.legs >= state.legsToWin) {
+      state.winner = state.turn;
+      gameMessage(player.name + ' vann matchen!');
+      auto = false;
+      releaseWake();
+    } else {
+      state.leg += 1;
+      for (const p of state.players) p.score = state.start;
+      state.turn = (state.leg - 1) % state.players.length;
+      gameMessage(player.name + ' vann leget. Leg ' + state.leg + ' börjar.');
+    }
+  } else {
+    state.turn = (state.turn + 1) % state.players.length;
+    gameMessage('');
+  }
+
+  advanceOnClear = false;
+  if (tracker && auto && !fromCamera) {
+    tracker.waitForClear();
+    cameraMessage('Ta ur alla pilar. Kameran väntar på tom tavla.', 'clear');
+  }
+  save();
+  render();
+  updateButtons();
+}
+
 function pauseForDialog(){modalPaused=true;}
 function resumeCamera() {
   if (!tracker || !auto) return;
@@ -51,7 +96,7 @@ function choose(d){if(insert(d))$('manual').close();}
 for(let n=1;n<=20;n++){let b=document.createElement('button');b.textContent=n;b.onclick=()=>choose({value:n*multiplier,m:multiplier,label:(multiplier===3?'T':multiplier===2?'D':'')+n});$('numbers').append(b);}document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{multiplier=+b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('selected',x===b));});$('bull').onclick=()=>choose({value:25,m:1,label:'Bull'});$('doublebull').onclick=()=>choose({value:50,m:2,label:'Bullseye'});$('miss').onclick=()=>choose({value:0,m:1,label:'Miss'});$('manual-open').onclick=()=>openManual();$('manual-close').onclick=()=>$('manual').close();$('manual').addEventListener('close',()=>{editIndex=null;resumeAfterDialog();render();});
 $('board').onclick=e=>{let p=boardPoint($('board'),e.clientX,e.clientY);if(Math.hypot(p.x,p.y)>1.08)return;let d=hit(p.x,p.y);insert({...d,bx:p.x,by:p.y});};$('board').tabIndex=0;$('board').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openManual();}};
 $('undo').onclick=()=>{if(!undoStack.length)return;state=JSON.parse(undoStack.pop());advanceOnClear=false;editIndex=null;save();render();gameMessage('Senaste ändringen ångrad.');if(tracker&&auto){if(tracker.empty)tracker.phase='watch';resumeCamera();}};$('next').onclick=()=>finishVisit(false);
-function openSetup(){pauseForDialog();$('setup').showModal();} $('new').onclick=openSetup;$('settings-open').onclick=openSetup;$('cancel').onclick=()=>$('setup').close();$('setup').addEventListener('close',resumeAfterDialog);$('setupform').onsubmit=e=>{e.preventDefault();let names=[$('name1').value.trim(),$('name2').value.trim()].filter(Boolean);if(!names.length)return;snapshot();state=fresh(names,+$('startscore').value,$('out').value==='double');advanceOnClear=false;editIndex=null;gameMessage('');if(tracker){tracker.restart();auto=false;releaseWake();cameraMessage('Ny match. Töm tavlan och tryck Starta automatik.','paused');}save();render();updateButtons();$('setup').close();};$('stats-open').onclick=()=>{pauseForDialog();$('statistics').showModal();};$('stats-close').onclick=()=>$('statistics').close();$('statistics').addEventListener('close',resumeAfterDialog);
+function openSetup(){pauseForDialog();$('setup').showModal();} $('new').onclick=openSetup;$('settings-open').onclick=openSetup;$('cancel').onclick=()=>$('setup').close();$('setup').addEventListener('close',resumeAfterDialog);$('setupform').onsubmit=e=>{e.preventDefault();let names=[$('name1').value.trim(),$('name2').value.trim()].filter(Boolean);if(!names.length)return;snapshot();state=fresh(names,+$('startscore').value,$('out').value==='double',+$('legs').value);advanceOnClear=false;editIndex=null;gameMessage('');if(tracker){tracker.restart();auto=false;releaseWake();cameraMessage('Ny match. Töm tavlan och tryck Starta automatik.','paused');}save();render();updateButtons();$('setup').close();};$('stats-open').onclick=()=>{pauseForDialog();$('statistics').showModal();};$('stats-close').onclick=()=>$('statistics').close();$('statistics').addEventListener('close',resumeAfterDialog);
 function cameraMessage(text,status){$('camstatus').textContent=text;$('auto-status').textContent=text;$('auto-status').classList.toggle('live',status==='live');}
 function updateButtons(){$('camera-count').textContent=stream?'1':'0';$('pause-auto').hidden=!tracker;$('pause-auto').textContent=auto?'Pausa':'Starta automatik';$('camera-control').classList.toggle('live',auto);$('start').hidden=!!stream;$('stop').hidden=!stream;$('calibrate').disabled=!stream;}
 function parkDock(){const dock=$('camera-dock');if(cameraView){$('camera-host').append(dock);dock.classList.remove('parked');}else if(stream){$('preview-host').append(dock);dock.classList.remove('parked');$('preview-host').hidden=false;}else{document.body.append(dock);dock.classList.add('parked');$('preview-host').hidden=true;}if(stream)video.play().catch(()=>{});}
