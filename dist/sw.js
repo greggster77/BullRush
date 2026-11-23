@@ -1,10 +1,11 @@
 const cachePrefix = 'bullrush-app-';
-const cacheName = cachePrefix + 'v3';
+const cacheName = cachePrefix + 'v4';
 const appShell = [
   './',
   './style.css',
   './app.js',
   './core.mjs',
+  './bot.mjs',
   './board.mjs',
   './detection.mjs',
   './manifest.json',

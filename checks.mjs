@@ -15,3 +15,40 @@ assert.equal(checkout(40, true, 0), null);
 assert.deepEqual(checkout(180, false, 3), ['T20', 'T20', 'T20']);
 assert.deepEqual(checkout(1, false, 1), ['1']);
 console.log('Scoring, bust, checkout and perspective checks passed.');
+
+const { botLevels, botThrow } = await import('./dist/bot.mjs');
+assert.equal(botThrow(40, true, 1, 'novice', () => 0).label, 'D20');
+assert.equal(botThrow(50, true, 1, 'elite', () => 0).label, 'Bullseye');
+assert.equal(botThrow(20, false, 1, 'club', () => 0).label, '20');
+
+let previousMedian = Infinity;
+for (const [level, settings] of Object.entries(botLevels)) {
+  let seed = 57551;
+  const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+  const throwsToWin = [];
+  for (let leg = 0; leg < 500; leg += 1) {
+    let score = 501;
+    let dartCount = 0;
+    while (score > 0 && dartCount < 900) {
+      const darts = [];
+      for (let left = 3; left > 0; left -= 1) {
+        const remaining = visitResult(score, darts, true).left;
+        darts.push(botThrow(remaining, true, left, level, random));
+        dartCount += 1;
+        const visit = visitResult(score, darts, true);
+        if (visit.win || visit.bust || left === 1) {
+          score = visit.left;
+          break;
+        }
+      }
+    }
+    assert.equal(score, 0);
+    throwsToWin.push(dartCount);
+  }
+  throwsToWin.sort((a, b) => a - b);
+  const median = throwsToWin[Math.floor(throwsToWin.length / 2)];
+  assert.ok(median < previousMedian);
+  assert.ok(Math.abs(median - settings.typical501) <= 8);
+  previousMedian = median;
+}
+console.log('Bot targets, legal finishes and all six difficulty levels passed.');

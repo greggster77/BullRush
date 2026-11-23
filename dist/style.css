@@ -26,3 +26,17 @@
   margin: 0;
   min-height: 0;
 }
+
+.bot-status {
+  margin: 9px 0 0;
+  padding: 8px 12px;
+  border: 1px solid #365785;
+  border-radius: 11px;
+  background: #102545;
+  color: #dbe8ff;
+  font-size: .875rem;
+}
+
+#bot-level-hint {
+  margin-top: -8px;
+}
