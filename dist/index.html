@@ -2,6 +2,12 @@
 <main id="match-screen" class="match-screen"><header class="match-header"><button id="new" class="icon-button" aria-label="Ny match">×</button><span id="match-format">501 · Dubbel ut</span><div><button id="stats-open" class="icon-button" aria-label="Visa statistik"><svg viewBox="0 0 24 24"><path d="M5 20V12M12 20V4M19 20V8"/></svg></button><button id="settings-open" class="icon-button" aria-label="Matchinställningar"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg></button></div></header>
 <section id="players" class="scoreboard" aria-label="Spelarnas poäng"></section>
 <div class="match-body"><section class="visit-bar" aria-label="De tre pilarna"><div id="darts" class="darts"></div><strong id="visitTotal">0</strong></section>
+<div id="checkout-hint" role="status" aria-live="polite" aria-atomic="true">
+  <p id="checkout-card" class="checkout-card" hidden>
+    <span id="checkout-caption"></span>
+    <strong id="checkout-route"></strong>
+  </p>
+</div>
 <div class="board-top"><button id="camera-open" class="camera-count" aria-label="Öppna kamera"><svg viewBox="0 0 24 24"><path d="M8 5 6 8H3v12h18V8h-3l-2-3Z"/><circle cx="12" cy="13" r="4"/></svg><span id="camera-count">0</span></button><span id="auto-status" class="auto-status">Kamera av</span><button id="pause-auto" class="small-button" hidden>Pausa</button></div>
 <section class="board-stage" aria-label="Darttavla"><canvas id="board" width="760" height="760" role="img" aria-label="Darttavla med registrerade träffar. Tryck på tavlan för manuell inmatning."></canvas><div id="preview-host" class="preview-host" hidden></div></section>
 <p id="checkout" class="checkout"></p><p id="gamestatus" class="game-message" role="status" aria-live="polite"></p>
